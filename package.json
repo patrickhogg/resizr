@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vue-tsc && vite build && electron-builder",
     "build:win": "vue-tsc && vite build && electron-builder --win",
-    "build:mac": "vue-tsc && vite build && electron-builder --mac",
-    "build:all": "vue-tsc && vite build && electron-builder -mw",
+    "prepare:mac": "bash scripts/prepare-mac-binaries.sh",
+    "build:mac": "npm run prepare:mac && vue-tsc && vite build && electron-builder --mac",
+    "build:all": "npm run prepare:mac && vue-tsc && vite build && electron-builder -mw",
     "preview": "vite preview"
   },
   "build": {

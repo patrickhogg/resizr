@@ -74,16 +74,15 @@ Run these commands on the operating system you intend to build for (macOS builds
 
 The compiled binaries are placed in the `release/` directory.
 
-### Building for the other Mac architecture (`sharp` binaries)
+### Building for both Mac architectures (`sharp` binaries)
 
-`sharp` ships prebuilt, architecture-specific binaries, and `npm install` only fetches the ones for the machine you're on. To build the **other** architecture (e.g. an Intel `x64` build on an Apple Silicon Mac), install that architecture's binaries first — `npm pack` downloads them without disturbing your host install:
+`sharp` ships prebuilt, architecture-specific binaries, and `npm install` only fetches the ones for the machine you're on. Building both Mac slices therefore needs the **other** architecture's binaries too. `npm run build:mac` handles this automatically — it first runs [`scripts/prepare-mac-binaries.sh`](scripts/prepare-mac-binaries.sh), which downloads any missing `@img/sharp-darwin-*` packages (the exact versions `sharp` expects) into `node_modules/@img` without disturbing your host install.
+
+The script is idempotent (a no-op, and needs no network, once both arches are present) and re-adds the binaries after a later `npm install` prunes them. To run it on its own:
 
 ```bash
-npm pack @img/sharp-darwin-x64@0.34.5 @img/sharp-libvips-darwin-x64@1.2.4
-# extract each tarball's package/ folder into node_modules/@img/<name>/
+npm run prepare:mac
 ```
-
-Both architectures' binaries must be present in `node_modules/@img` at build time. (Swap `x64` → `arm64` when building the Apple Silicon slice from an Intel Mac.) A later `npm install` prunes the non-host binaries, so re-run this before your next cross-architecture build.
 
 ### Code signing
 
