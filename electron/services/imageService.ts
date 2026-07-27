@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import convert from 'heic-convert';
 
 export interface SizeConfig {
   width: number;
@@ -19,7 +20,10 @@ export const resizeImage = async (
   sizes: SizeConfig[],
   fileNameTemplate: string,
   outputFormat: 'original' | 'jpeg' | 'png' | 'webp' = 'original',
-  quality: number = 70
+  quality: number = 70,
+  usedOutputPaths?: Set<string>,
+  sequence?: number,
+  dateStr?: string
 ): Promise<ResizeResult[]> => {
   const originalExt = path.extname(inputPath);
   const baseName = path.basename(inputPath, originalExt);
@@ -27,33 +31,76 @@ export const resizeImage = async (
 
   await fs.mkdir(outputDir, { recursive: true });
 
-  const pipeline = sharp(inputPath);
-  
-  // Determine final extension based on outputFormat
+  // sharp's prebuilt binaries can't decode HEVC-coded HEIC/HEIF, so decode those
+  // inputs to a JPEG buffer first with heic-convert and hand that to sharp. Since
+  // the source is now JPEG, "Retain Original" for these inputs falls back to JPEG.
+  const isHeic = originalExt.toLowerCase() === '.heic' || originalExt.toLowerCase() === '.heif';
+  let pipelineSource: string | Uint8Array = inputPath;
+  if (isHeic) {
+    const inputBuffer = await fs.readFile(inputPath);
+    pipelineSource = await convert({
+      buffer: inputBuffer,
+      format: 'JPEG',
+      quality: 1,
+    });
+  }
+
+  // failOn: 'none' keeps benign decoder warnings (common with phone HEIC/JPEG,
+  // e.g. truncated or non-standard EXIF) from aborting the whole file.
+  const pipeline = sharp(pipelineSource, { failOn: 'none' });
+
+  const effectiveFormat = outputFormat === 'original' && isHeic ? 'jpeg' : outputFormat;
+
+  // Determine final extension based on the effective output format
   let finalExt = originalExt;
-  if (outputFormat === 'jpeg') finalExt = '.jpg';
-  if (outputFormat === 'png') finalExt = '.png';
-  if (outputFormat === 'webp') finalExt = '.webp';
+  if (effectiveFormat === 'jpeg') finalExt = '.jpg';
+  if (effectiveFormat === 'png') finalExt = '.png';
+  if (effectiveFormat === 'webp') finalExt = '.webp';
 
   for (const size of sizes) {
     const targetWidth = size.width;
     
+    // {n} is a per-source sequential index (same for every size of one image),
+    // useful when the original filenames are meaningless (e.g. camera UUIDs).
     let outputFileName = fileNameTemplate
-      .replace('{base}', baseName)
-      .replace('{width}', targetWidth.toString())
-      .replace('{ext}', finalExt.replace('.', ''));
-    
+      .split('{base}').join(baseName)
+      .split('{date}').join(dateStr ?? '')
+      .split('{width}').join(targetWidth.toString())
+      .split('{ext}').join(finalExt.replace('.', ''))
+      .split('{n}').join(sequence !== undefined ? sequence.toString() : '');
+
     if (!outputFileName) {
       outputFileName = `${baseName}-${targetWidth}${finalExt}`;
     }
 
     let outputPath = path.join(outputDir, outputFileName);
-    
+
     // Prevent overwriting the exact same source file
     if (path.resolve(outputPath) === path.resolve(inputPath)) {
       const parsedPath = path.parse(outputPath);
       outputPath = path.join(parsedPath.dir, `${parsedPath.name}_resized${parsedPath.ext}`);
       outputFileName = path.basename(outputPath);
+    }
+
+    // Guarantee a unique destination across the whole batch. Without this, a naming
+    // template lacking {base} (e.g. "fetzer-{width}.{ext}") maps every source image to
+    // the same file — causing overwrites and, under concurrency, write races
+    // ("Bad file descriptor") when multiple workers hit the same path at once.
+    if (usedOutputPaths) {
+      const key = (p: string) => path.resolve(p).toLowerCase();
+      if (usedOutputPaths.has(key(outputPath))) {
+        const parsed = path.parse(outputPath);
+        let counter = 2;
+        let candidate = outputPath;
+        while (usedOutputPaths.has(key(candidate))) {
+          candidate = path.join(parsed.dir, `${parsed.name}-${counter}${parsed.ext}`);
+          counter++;
+        }
+        outputPath = candidate;
+        outputFileName = path.basename(outputPath);
+      }
+      // Reserve synchronously (before any await) so concurrent workers never collide.
+      usedOutputPaths.add(key(outputPath));
     }
 
     let op = pipeline.clone().resize({
@@ -62,9 +109,9 @@ export const resizeImage = async (
     });
 
     // Apply format and quality
-    const formatToApply = outputFormat === 'original' 
-      ? originalExt.toLowerCase().replace('.', '') 
-      : outputFormat;
+    const formatToApply = effectiveFormat === 'original'
+      ? originalExt.toLowerCase().replace('.', '')
+      : effectiveFormat;
 
     if (formatToApply === 'jpeg' || formatToApply === 'jpg') {
       op = op.jpeg({ quality });

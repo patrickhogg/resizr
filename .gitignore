@@ -35,4 +35,4 @@ out/
 *.sw?
 
 # App specific
-.mip_processed.json
+.resizr_processed.json

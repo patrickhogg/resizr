@@ -1,8 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, nativeImage } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import { runBatchProcessor, getDirectoryStats, cancelBatchProcessor } from './services/processor'
+import { runBatchProcessor, getDirectoryStats, cancelBatchProcessor, TRACKING_FILE } from './services/processor'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -18,7 +18,8 @@ let win: BrowserWindow | null
 
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    title: 'Resizr',
+    icon: path.join(process.env.VITE_PUBLIC, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -50,6 +51,13 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
+  // On macOS the BrowserWindow `icon` option is ignored; set the Dock icon
+  // explicitly so it shows during `npm run dev` (packaged builds use the .icns).
+  if (process.platform === 'darwin' && app.dock) {
+    const dockIcon = nativeImage.createFromPath(path.join(process.env.VITE_PUBLIC, 'icon.png'))
+    if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon)
+  }
+
   createWindow()
 
   // IPC Handlers
@@ -86,7 +94,7 @@ app.whenReady().then(() => {
   ipcMain.handle('delete-tracking-file', async (_event, dirPath) => {
     if (!dirPath) return false
     try {
-      const filePath = path.join(dirPath, '.mip_processed.json')
+      const filePath = path.join(dirPath, TRACKING_FILE)
       await fs.unlink(filePath)
       return true
     } catch (e) {

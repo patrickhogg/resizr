@@ -1,7 +1,7 @@
 {
-  "name": "mass-image-processor",
+  "name": "resizr",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,8 +12,8 @@
     "preview": "vite preview"
   },
   "build": {
-    "appId": "com.mass-image-processor.app",
-    "productName": "Mass Image Processor",
+    "appId": "com.resizr.app",
+    "productName": "Resizr",
     "asar": true,
     "asarUnpack": [
       "**/node_modules/sharp/**/*",
@@ -24,12 +24,27 @@
       "output": "release"
     },
     "mac": {
+      "icon": "build/icon.png",
       "target": [
-        "dmg",
-        "zip"
-      ]
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-Mac-${version}-${arch}.${ext}"
     },
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "nsis",
@@ -53,17 +68,15 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.43",
-    "@ai-sdk/openai": "^3.0.41",
     "@tailwindcss/vite": "^4.2.1",
-    "ai": "^6.0.116",
+    "heic-convert": "^2.1.0",
     "lucide-vue-next": "^0.577.0",
     "p-limit": "^7.3.0",
     "sharp": "^0.34.5",
-    "vue": "^3.4.21",
-    "zod": "^4.3.6"
+    "vue": "^3.4.21"
   },
   "devDependencies": {
+    "@types/heic-convert": "^2.1.1",
     "@vitejs/plugin-vue": "^5.0.4",
     "autoprefixer": "^10.4.27",
     "electron": "^30.0.1",

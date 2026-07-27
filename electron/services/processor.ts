@@ -2,8 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import pLimit from 'p-limit';
 import { resizeImage, SizeConfig } from './imageService';
-import { analyzeImage, AIProvider } from './aiService';
 import { BrowserWindow } from 'electron';
+
+// Supported input image extensions (HEIC/HEIF are decode-only).
+export const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.heic', '.heif'];
+
+// Name of the hidden tracking file written to the root of the input folder.
+export const TRACKING_FILE = '.resizr_processed.json';
 
 export async function getFiles(dir: string, excludeDir?: string): Promise<string[]> {
   const resolvedExclude = excludeDir ? path.resolve(excludeDir) : undefined;
@@ -27,9 +32,8 @@ export const cancelBatchProcessor = () => {
 export const getDirectoryStats = async (inputDir: string, outputDir?: string) => {
   try {
     const allFiles = await getFiles(inputDir, outputDir);
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.tiff'];
-    
-    const processedRecordPath = path.join(inputDir, '.mip_processed.json');
+
+    const processedRecordPath = path.join(inputDir, TRACKING_FILE);
     let processedFiles: string[] = [];
     try {
       const data = await fs.readFile(processedRecordPath, 'utf-8');
@@ -43,10 +47,10 @@ export const getDirectoryStats = async (inputDir: string, outputDir?: string) =>
     let pendingCount = 0;
 
     allFiles.forEach((f) => {
-      if (imageExtensions.includes(path.extname(f).toLowerCase())) {
+      if (IMAGE_EXTENSIONS.includes(path.extname(f).toLowerCase())) {
         totalValidImages++;
         const relPath = path.relative(inputDir, f);
-        
+
         if (!processedSet.has(relPath)) {
           pendingCount++;
         }
@@ -69,15 +73,8 @@ export interface ProcessorOptions {
   outputDir: string;
   sizes: SizeConfig[];
   imageNameTemplate: string;
-  jsonNameTemplate: string;
   outputFormat: 'original' | 'jpeg' | 'png' | 'webp';
   quality: number;
-  generateAiMetadata: boolean;
-  aiProvider: AIProvider;
-  aiApiKey: string;
-  aiModel: string;
-  aiSchema: Record<string, any>;
-  aiPrompt: string;
   concurrency: number;
 }
 
@@ -92,25 +89,22 @@ export const runBatchProcessor = async (
     outputDir,
     sizes,
     imageNameTemplate,
-    jsonNameTemplate,
     outputFormat,
     quality,
-    generateAiMetadata,
-    aiProvider,
-    aiApiKey,
-    aiModel,
-    aiSchema,
-    aiPrompt,
     concurrency,
   } = options;
 
   const limit = pLimit(concurrency);
   const writeLimit = pLimit(1); // Lock for incremental tracking file writes
+  const usedOutputPaths = new Set<string>(); // Batch-wide guard against colliding output filenames
+
+  // Current date as YYYY-MM-DD (zero-padded), computed once so the whole batch shares it.
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const allFiles = await getFiles(inputDir, outputDir);
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.tiff'];
-  
+
   // Load tracking metadata for previously processed files
-  const processedRecordPath = path.join(inputDir, '.mip_processed.json');
+  const processedRecordPath = path.join(inputDir, TRACKING_FILE);
   let processedFiles: string[] = [];
   try {
     const data = await fs.readFile(processedRecordPath, 'utf-8');
@@ -120,10 +114,17 @@ export const runBatchProcessor = async (
   }
   const processedSet = new Set(processedFiles);
 
-  const imageFiles = allFiles
-    .filter((f) => imageExtensions.includes(path.extname(f).toLowerCase()))
+  // Number every image in the batch up front, sorted, so {n} is stable and
+  // sequential regardless of processing order or resume state.
+  const allImageRel = allFiles
+    .filter((f) => IMAGE_EXTENSIONS.includes(path.extname(f).toLowerCase()))
     .map((f) => path.relative(inputDir, f))
-    .filter((relPath) => !processedSet.has(relPath));
+    .sort((a, b) => a.localeCompare(b));
+
+  const sequenceMap = new Map<string, number>();
+  allImageRel.forEach((rel, i) => sequenceMap.set(rel, i + 1));
+
+  const imageFiles = allImageRel.filter((relPath) => !processedSet.has(relPath));
 
   const total = imageFiles.length;
   if (total === 0) {
@@ -151,59 +152,26 @@ export const runBatchProcessor = async (
         const inputPath = path.join(inputDir, file);
         const relativeDir = path.dirname(file);
         const currentOutputDir = path.join(outputDir, relativeDir);
-        
+
         await fs.mkdir(currentOutputDir, { recursive: true });
 
-        const fileName = path.basename(file);
-        const ext = path.extname(fileName);
-        const baseName = path.basename(fileName, ext);
-
-        // 1. Resize Images (1:N)
-        const resizeResults = await resizeImage(
+        // Resize Images (1:N)
+        await resizeImage(
           inputPath,
           currentOutputDir,
           sizes,
           imageNameTemplate,
           outputFormat,
-          quality
+          quality,
+          usedOutputPaths,
+          sequenceMap.get(file),
+          dateStr
         );
 
         if (isCancelled) return;
 
-        if (generateAiMetadata) {
-          // 2. AI Analysis
-          const aiMetadata = await analyzeImage({
-            provider: aiProvider,
-            apiKey: aiApiKey,
-            model: aiModel,
-            imagePath: inputPath,
-            schemaDefinition: aiSchema,
-            prompt: aiPrompt,
-          });
-
-          // 3. Merge Metadata & Sizes into a single JSON
-          const finalJson = {
-            ...aiMetadata,
-            original_filename: file,
-            available_sizes: resizeResults.map((r) => ({
-              width: r.width,
-              fileName: r.fileName,
-            })),
-          };
-
-          // 4. Save JSON using template
-          const jsonFileName = jsonNameTemplate
-            .replace('{base}', baseName)
-            .replace('{width}', '') // Strip width if accidentally included
-            .replace('{ext}', 'json')
-            .replace(/-+\./, '.'); // Cleanup hanging dashes before extension
-          
-          const jsonPath = path.join(currentOutputDir, jsonFileName);
-          await fs.writeFile(jsonPath, JSON.stringify(finalJson, null, 2));
-        }
-
         processedSet.add(file);
-        
+
         // Write tracking file incrementally using a lock (pLimit(1)) to prevent write conflicts
         await writeLimit(async () => {
           try {
@@ -222,7 +190,7 @@ export const runBatchProcessor = async (
   );
 
   await Promise.all(tasks);
-  
+
   // Wait for any pending incremental writes to finish, then do one final save
   await writeLimit(async () => {
     try {

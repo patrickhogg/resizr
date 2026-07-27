@@ -1,9 +1,14 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.resizr.app",
   "asar": true,
-  "productName": "YourAppName",
+  "asarUnpack": [
+    "**/node_modules/sharp/**/*",
+    "**/node_modules/@img/**/*",
+    "**/*.node"
+  ],
+  "productName": "Resizr",
   "directories": {
     "output": "release/${version}"
   },
@@ -12,12 +17,27 @@
     "dist-electron"
   ],
   "mac": {
+    "icon": "build/icon.png",
     "target": [
-      "dmg"
+      {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      }
     ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
+    "artifactName": "${productName}-Mac-${version}-${arch}.${ext}"
   },
   "win": {
+    "icon": "build/icon.png",
     "target": [
       {
         "target": "nsis",
@@ -35,6 +55,7 @@
     "deleteAppDataOnUninstall": false
   },
   "linux": {
+    "icon": "build/icon.png",
     "target": [
       "AppImage"
     ],
