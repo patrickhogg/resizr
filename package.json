@@ -24,8 +24,10 @@
     "directories": {
       "output": "release"
     },
+    "afterPack": "scripts/afterPack.cjs",
     "mac": {
       "icon": "build/icon.png",
+      "identity": null,
       "target": [
         {
           "target": "dmg",

@@ -86,11 +86,15 @@ npm run prepare:mac
 
 ### Code signing
 
-Builds are unsigned unless an Apple Developer ID is configured. macOS Gatekeeper will block an unsigned app on first launch — open it via **right-click → Open**, or clear the quarantine attribute:
+macOS builds are **ad-hoc signed** for internal use (no Apple Developer ID or account required). The [`scripts/afterPack.cjs`](scripts/afterPack.cjs) hook signs each packaged app with the ad-hoc identity so it carries a valid signature — this avoids the "app is damaged" error that unsigned Electron apps hit on Apple Silicon.
+
+Ad-hoc signing is not trusted by Apple, so a copy downloaded or transferred to another Mac is still quarantined by Gatekeeper on first launch. Open it via **right-click → Open**, or clear the quarantine attribute:
 
 ```bash
 xattr -cr /Applications/Resizr.app
 ```
+
+For public distribution you'd need a Developer ID certificate plus notarization; that's intentionally not configured here.
 
 ## Usage Guide
 

@@ -16,8 +16,10 @@
     "dist",
     "dist-electron"
   ],
+  "afterPack": "scripts/afterPack.cjs",
   "mac": {
     "icon": "build/icon.png",
+    "identity": null,
     "target": [
       {
         "target": "dmg",
