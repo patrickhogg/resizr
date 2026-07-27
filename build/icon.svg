@@ -1,0 +1,38 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="glyph" x1="300" y1="470" x2="720" y2="700" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+    <clipPath id="cardClip">
+      <rect x="236" y="212" width="520" height="520" rx="68"/>
+    </clipPath>
+  </defs>
+
+  <!-- App tile -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="url(#bg)"/>
+
+  <!-- Ghost frame (a second output size peeking behind) -->
+  <rect x="196" y="172" width="520" height="520" rx="68" fill="none" stroke="#FFFFFF" stroke-opacity="0.32" stroke-width="26"/>
+
+  <!-- Main photo card -->
+  <rect x="236" y="212" width="520" height="520" rx="68" fill="#FFFFFF"/>
+
+  <!-- Image glyph inside the card -->
+  <g clip-path="url(#cardClip)">
+    <circle cx="636" cy="336" r="52" fill="url(#glyph)"/>
+    <path d="M236 690 L430 452 L560 612 L648 520 L756 652 L756 732 L236 732 Z" fill="url(#glyph)"/>
+  </g>
+
+  <!-- Resize badge: diagonal double-headed scale arrow -->
+  <circle cx="772" cy="772" r="156" fill="#FFFFFF"/>
+  <g stroke="#4F46E5" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <line x1="716" y1="716" x2="828" y2="828"/>
+    <polyline points="716,782 716,716 782,716"/>
+    <polyline points="828,762 828,828 762,828"/>
+  </g>
+</svg>
