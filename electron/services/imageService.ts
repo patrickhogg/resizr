@@ -47,7 +47,10 @@ export const resizeImage = async (
 
   // failOn: 'none' keeps benign decoder warnings (common with phone HEIC/JPEG,
   // e.g. truncated or non-standard EXIF) from aborting the whole file.
-  const pipeline = sharp(pipelineSource, { failOn: 'none' });
+  // .rotate() with no angle auto-orients from the EXIF Orientation tag and bakes
+  // it into the pixels, so photos shot vertically aren't output sideways when the
+  // tag is dropped on re-encode.
+  const pipeline = sharp(pipelineSource, { failOn: 'none' }).rotate();
 
   const effectiveFormat = outputFormat === 'original' && isHeic ? 'jpeg' : outputFormat;
 
